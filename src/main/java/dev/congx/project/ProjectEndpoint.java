@@ -1,12 +1,20 @@
 package dev.congx.project;
 
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.client.KubernetesClient;
 import org.jboss.logging.Logger;
 
+import javax.inject.Inject;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
+import java.util.List;
 
 @Path("/project")
 public class ProjectEndpoint {
+
+  @Inject
+  KubernetesClient kubernetesClient;
 
   private static final Logger LOG = Logger.getLogger(ProjectEndpoint.class);
 
@@ -29,5 +37,17 @@ public class ProjectEndpoint {
     p.persist();
     LOG.info("Project information persisted to database");
     return p.getNamespace();
+  }
+
+  @GET
+  @Path("/{namespace}/pods")
+  public String getPods(@PathParam("namespace") String namespace) {
+    PodList podList = this.kubernetesClient.pods().inNamespace(namespace).list();
+    StringBuilder list = new StringBuilder();
+
+    for (Pod pod : podList.getItems()) {
+      list.append(pod.getMetadata().getName()).append(", ");
+    }
+    return list.toString();
   }
 }

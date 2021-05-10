@@ -8,6 +8,7 @@ import dev.congx.utils.RandomStringGenerator;
 import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
+import org.jboss.logging.Logger;
 
 @Entity
 public class Project extends PanacheEntity {
@@ -15,11 +16,17 @@ public class Project extends PanacheEntity {
   @Transient
   private KubernetesClient kubernetesClient;
 
+  @Inject
+  @Transient
+  Logger log;
+
   public String app;
   private String namespace;
 
   public String create(String app) {
     this.app = app;
+
+    log.info("creating " + app);
     this.namespace = RandomStringGenerator.generateRandomName();
 
     // Create a namespace

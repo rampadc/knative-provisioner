@@ -7,19 +7,20 @@ metadata:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: provisioner
+  name: knative-provisioner
   namespace: knative-provisioner
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: provisioner
+  name: knative-provisioner
 rules:
   - apiGroups: [""]
     resources:
       - namespaces
       - resourcequotas
       - limitranges
+      - pods
     verbs:
       - '*'
 ---
@@ -29,9 +30,88 @@ metadata:
   name: provisioner
 roleRef:
   kind: ClusterRole
-  name: provisioner
+  name: knative-provisioner
   apiGroup: rbac.authorization.k8s.io
 subjects:
   - kind: ServiceAccount
-    name: provisioner
+    name: knative-provisioner
     namespace: knative-provisioner
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: knative-provisioner
+  namespace: knative-provisioner
+  labels:
+    app: knative-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: knative-provisioner
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: knative-provisioner
+        deploymentconfig: knative-provisioner
+    spec:
+      serviceAccountName: knative-provisioner
+      containers:
+        - name: knative-provisioner
+          image: docker.io/rampadc/knative-provisioner:latest
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+            - containerPort: 8443
+              protocol: TCP
+            - containerPort: 8778
+              protocol: TCP
+          env:
+            - name: POSTGRESQL_SERVICE_HOST
+              value: postgresql
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: Always
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: knative-provisioner
+  namespace: knative-provisioner
+spec:
+  ports:
+    - name: 8080-tcp
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  selector:
+    app: knative-provisioner
+  type: ClusterIP
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: knative-provisioner
+  namespace: knative-provisioner
+spec:
+  host: >-
+    knative-provisioner.cong-test-cluster-1366703c4e31f04a159bbc064f0431e4-0000.au-syd.containers.appdomain.cloud
+  to:
+    kind: Service
+    name: knative-provisioner
+  port:
+    targetPort: 8080-tcp
