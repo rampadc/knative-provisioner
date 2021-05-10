@@ -1,50 +1,27 @@
 package dev.congx.project;
 
-import javax.inject.Inject;
 import javax.persistence.Entity;
-import javax.persistence.Transient;
-
 import dev.congx.utils.RandomStringGenerator;
-import io.fabric8.kubernetes.api.model.*;
-import io.fabric8.kubernetes.client.KubernetesClient;
 import io.quarkus.hibernate.orm.panache.PanacheEntity;
-import org.jboss.logging.Logger;
+
+import java.util.regex.Pattern;
 
 @Entity
 public class Project extends PanacheEntity {
-  @Inject
-  @Transient
-  private KubernetesClient kubernetesClient;
-
-  @Inject
-  @Transient
-  Logger log;
-
   public String app;
   private String namespace;
 
   public String create(String app) {
+    Pattern nsRegex = Pattern.compile("[a-z0-9]([-a-z0-9]*[a-z0-9])?");
+
     this.app = app;
 
-    log.info("creating " + app);
-    this.namespace = RandomStringGenerator.generateRandomName();
+    String r;
+    do {
+      r = RandomStringGenerator.generateRandomName().toLowerCase();
+    } while (!nsRegex.matcher(r).matches());
 
-    // Create a namespace
-    Namespace ns = new NamespaceBuilder().withNewMetadata()
-      .withName(this.namespace)
-      .addToLabels("app", this.app)
-      .endMetadata().build();
-    this.kubernetesClient.namespaces().create(ns);
-
-    // Apply resource quotas
-    ResourceQuota quota = new ResourceQuotaBuilder().withNewMetadata()
-      .withName("pod-quota")
-      .endMetadata().withNewSpec()
-      .addToHard("limits.cpu", new Quantity("500mi"))
-      .addToHard("limits.memory", new Quantity("256Mi"))
-      .endSpec().build();
-    this.kubernetesClient.resourceQuotas().inNamespace(this.namespace).create(quota);
-
+    this.namespace = r;
     return this.namespace;
   }
 

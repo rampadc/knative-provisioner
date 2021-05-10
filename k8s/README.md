@@ -1,0 +1,1 @@
+./mvnw package &&  docker build -f src/main/docker/Dockerfile.jvm -t rampadc/knative-provisioner:latest . && docker push docker.io/rampadc/knative-provisioner:latest && oc rollout restart deploy/knative-provisioner

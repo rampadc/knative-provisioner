@@ -1,14 +1,13 @@
 package dev.congx.project;
 
-import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import org.jboss.logging.Logger;
 
 import javax.inject.Inject;
+import javax.transaction.Transactional;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Response;
-import java.util.List;
 
 @Path("/project")
 public class ProjectEndpoint {
@@ -19,9 +18,9 @@ public class ProjectEndpoint {
   private static final Logger LOG = Logger.getLogger(ProjectEndpoint.class);
 
   @GET
-  @Path("/new")
-  @QueryParam("app")
-  public String create(@QueryParam("app") String app) {
+  @Path("/new/{app}")
+  @Transactional
+  public String create(@PathParam("app") String app) {
     if (app == null) {
       LOG.error("User did not include ?app=X");
       throw new WebApplicationException("User did not include query param 'app': ?app=X", Response.Status.BAD_REQUEST);
@@ -33,9 +32,32 @@ public class ProjectEndpoint {
 
     Project p = new Project();
     p.create(app);
+
+    // Create a namespace
+    LOG.info("Creating namespace...");
+    Namespace ns = new NamespaceBuilder().withNewMetadata()
+      .withName(p.getNamespace())
+      .addToLabels("app", app)
+      .endMetadata().build();
+    this.kubernetesClient.namespaces().create(ns);
+    LOG.info("Namespace created: " + p.getNamespace());
+
+    // Apply resource quotas
+    LOG.info("Applying resource quotas to namespace " + p.getNamespace());
+    ResourceQuota quota = new ResourceQuotaBuilder().withNewMetadata()
+      .withName("pod-medium")
+      .endMetadata().withNewSpec()
+      .addToHard("limits.cpu", new Quantity("100m"))
+      .addToHard("limits.memory", new Quantity("256Mi"))
+      .endSpec().build();
+    this.kubernetesClient.resourceQuotas().inNamespace(p.getNamespace()).create(quota);
+    LOG.info("Resource quotas applied!");
+
     LOG.info("Project created with namespace " + p.getNamespace());
+
     p.persist();
     LOG.info("Project information persisted to database");
+
     return p.getNamespace();
   }
 
